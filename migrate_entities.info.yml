@@ -1,1 +1,13 @@
-Name:
+name: 'CSV Migration'
+description: 'Allows you to import and migrate csv.'
+package: 'Custom CSV Migration'
+core: 8.x
+type: module
+dependencies:
+  - migrate
+  - migrate_source_csv
+  - migrate_plus
+  - migrate_tools
+  - migrate_file
+  - node
+  - taxonomy
