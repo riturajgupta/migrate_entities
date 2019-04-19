@@ -8,7 +8,9 @@ use Drupal\Core\Form\FormBase;
 use Drupal\migrate_plus\Entity\MigrationGroup;
 use Drupal\migrate_plus\Entity\Migration;
 use Drupal\migrate_source_csv\CSVFileObject;
-
+use Drupal\migrate\Row;
+use Drupal\migrate\Plugin\MigrationInterface;
+use Drupal\migrate\Plugin\MigrateSourceInterface;
 
 function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
  if($form_id == 'simple_node_confirm_importing_form'){
@@ -33,6 +35,7 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
 
       $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
       $parameters= $sessionVariable->get('parameters');
+      
       $snp_nid= $parameters['node'];
       $node_storage = \Drupal::entityTypeManager()->getStorage('node')->load($snp_nid);
       $node = $node_storage->load($snp_nid);
@@ -41,6 +44,7 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
       
       $bundleType = $node_storage->get('field_select_content_type')->getValue()[0]['value'];
       $entityType = $node_storage->get('field_select_entity_type')->getValue()[0]['value'];
+      $bundleTypeSession = $sessionVariable->set('bundle_type', $bundleType);
        
       $operations = [];
       $map_values = $sessionVariable->get('mapvalues');
@@ -120,6 +124,12 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
         $image_flag = 0;
         foreach($header_row as $key => $value) {
           $process[$value] = $value;
+          $process[$value] = [
+            'plugin' => 'explode',
+            'source' => $value,
+            'delimiter' => ';',
+            'limit' => 5,
+          ];
          // kint($value);
           $type_result = FieldTermType($value,$bundleType);
            
@@ -134,23 +144,8 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
           
           if($type_result['entity_type'] == 'taxonomy_term' && $type_result['field_type'] == 'entity_reference') {
             $termValue[] = $value;
-          }
-
-          if($type_result['field_type'] == 'datetime') {
-              $process[$value] = [
-                'plugin' => 'format_date',
-                'from_format' => 'm/d/Y',
-                'to_format' => 'Y-m-d\TH:i:s',
-                'source' => $value,
-              ];
-          }
-
-          $process[$value] = [
-            'plugin' => 'explode',
-            'source' => $value,
-            'delimiter' => ';',
-            'limit' => 5,
-          ];
+          } 
+           
         }
 
         $process += [
@@ -162,35 +157,52 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
          
         if(!empty($fileValue)) {
           foreach($fileValue as $key_array => $key_value) {
-            $process[$key_value] = FileProcess($key_value,$bundleType);
+            $process[$key_value] = FileProcess($key_value, $bundleType);
           }
-          $file =
+          $files =
           [
-              'file_destination' => 'public://new_file/',
-          ];
+            'file_destination' => 'public://new_file/',
+          ];          
         }
+        $file = !empty($files) ? $files : [];         
 
         if(!empty($imageValue)) {
           foreach($imageValue as $key_array => $key_value) {
-            $process[$key_value] = ImageProcess($key_value,$bundleType);
+            $process[$key_value] = ImageProcess($key_value, $bundleType);
           }
-          $image = [
-              'image_destination' => 'public://new_images/',
+          $images = [
+            'image_destination' => 'public://new_images/',
           ];          
         }
+        $image = !empty($images) ? $images : [];
 
-        $constants['constants'] = array_merge($file,$image);
-        $constants = !empty($constants) ? $constants : '';
-       //kint($constants);die;
+        if(!empty($file) && !empty($image)) {
+          $constants = array_merge($file, $image);
+        }
+        else if(!empty($file)) {
+          $constants = $file;
+        }
+        else if(!empty($image)) {
+          $constants = $image;
+        }
+        else {
+          $constants = [];
+        }
+                
+        $constantMultiple = !empty($constants) ? $constants['constants'] = $constants : '';
+        //kint($constantMultiple); die; 
         if(!empty($termValue)) {
           foreach($termValue as $key_array => $key_value) {
-            $process[$key_value] = TaxonomyTermProcess($key_value,$bundleType);
+            $process[$key_value] = TaxonomyTermProcess($key_value, $bundleType);
           }
         }
-        
+         //kint($process); 
+        // kint($constantMultiple);
+         //die;
          if(!empty($data)){
+           $rand = rand();
             if (empty($migration['migration_group'])) {
-              $migrationGroup = 'custom_'.$bundleType.'_'.$entityType.'_'.'import11';
+              $migrationGroup = 'custom_'.$bundleType.'_'.$entityType.'_'.'import_'.$rand;
               $migration['migration_group'] = $migrationGroup;
             }
             else {
@@ -203,7 +215,7 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
               $group_properties = [];
               $group_properties['id'] = $migration['migration_group'];
               if ($migration['migration_group'] == $migrationGroup) {
-                $group_properties['label'] = 'Custom '.$bundleType.' '.$entityType.' import13';                 
+                $group_properties['label'] = 'Custom '.$bundleType.' '.$entityType.' import';
                 $group_properties['description'] = 'A group for import '.$bundleType.' '.$entityType; 
                 $group_properties['source_type'] = 'Custom CSV';
               }
@@ -216,8 +228,8 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
             }
 
             $migration = Migration::create([
-            'id' => $bundleType.'_'.$entityType.'_'.'import13',
-            'label' => $bundleType.' '.$entityType.' '.'migration import',
+            'id' => $bundleType.'_'.$entityType.'_'.'import_'.$rand,
+            'label' => $bundleType.' '.$entityType.' '.'migration import '.date("m/d/Y H:i:s"),
             'migration_group' => $migrationGroup,
             'source' => [
               'plugin' => 'csv',
@@ -231,7 +243,7 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state){
                 '0' => 'id',
               ],
               'file_flags' => \SplFileObject::READ_CSV | \SplFileObject::READ_AHEAD | \SplFileObject::DROP_NEW_LINE | \SplFileObject::SKIP_EMPTY,              
-              $constants,             
+              $constantMultiple,             
             ],
 
             'destination' => [
@@ -360,7 +372,7 @@ function FileProcess($field_name,$bundleType){
   if(!empty($machine_name)) { 
     $process = [
       'plugin' => 'file_import',
-      'source' => 'field_file',
+      'source' => $field_name,
       'destination' => 'constants/file_destination',
     ];
 
@@ -372,7 +384,7 @@ function FileProcess($field_name,$bundleType){
 
 }
 
-function ImageProcess($field_name,$bundleType){
+function ImageProcess($field_name, $bundleType){
   $type_result = FieldTermType($field_name, $bundleType);
   //kint($type_result); die;
   if($type_result['field_type'] == 'image' && $type_result['entity_type'] == 'file') {
@@ -383,7 +395,7 @@ function ImageProcess($field_name,$bundleType){
   if(!empty($machine_name)) { 
     $process = [
         'plugin' => 'image_import',
-        'source' => 'field_image',
+        'source' => $field_name,
         'destination' => 'constants/image_destination',
       ];
     return $process;
@@ -394,10 +406,10 @@ function ImageProcess($field_name,$bundleType){
 
 }
 
-
 function FieldTermType($field_name, $bundleType) {
-    $bundle_fields = \Drupal::getContainer()->get('entity_field.manager')->getFieldDefinitions('node', $bundleType);
-    $field_definition = $bundle_fields[$field_name];     
+  $bundle_fields = \Drupal::getContainer()->get('entity_field.manager')->getFieldDefinitions('node', $bundleType);
+  $field_definition = $bundle_fields[$field_name];   
+  if(!empty($field_definition)) {   
     $field_type = !empty($field_definition->getType()) ? $field_definition->getType() : '';
     $term_type = !empty($field_definition->getSettings()['target_type']) ? $field_definition->getSettings()['target_type'] : '';
     return [
@@ -406,11 +418,90 @@ function FieldTermType($field_name, $bundleType) {
       'field_definition' => $field_definition,
     ];
   }
+  else {
+    return;
+  }
+}
 
-function CsvHeader($path='') {
-    
+function CsvHeader($path='') {    
     $file = fopen($path, 'r');
     $headers = fgetcsv($file);
      
     return $headers;
+  }
+
+function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $source, MigrationInterface $migration) {
+  //\Drupal::service('event_dispatcher')->dispatch(MigrateEvents::PREPARE_ROW, new MigratePrepareRowEvent($row, $source, $migration));
+      
+  //   \Drupal::logger('custom_migrate')->debug($source);
+  //   \Drupal::logger('custom_migrate')->debug($migration);
+  // echo "<pre>";
+  // print_r($row);
+  // print_r($row->getSource());
+
+  $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
+  $bundleType = $sessionVariable->get('bundle_type');  
+
+  foreach($row->getSource() as $key => $value) {
+    $field_definitions = FieldTermType($key, $bundleType);
+    if($field_definitions['field_type'] == 'datetime') {
+      if($row->hasSourceProperty($key)) {         
+        if(!empty($row->getSourceProperty($key))) {
+          $dateformat = $row->getSourceProperty($key);
+          $findColon = strpos($dateformat, ";");
+          if($findColon !== false) {
+            $dateExplode = explode(";", $dateformat);
+            if(!empty($dateExplode)) {
+              foreach($dateExplode as $dateKey => $dateValue) {
+                $convertDate = date('Y-m-d\TH:i:s', strtotime($dateValue));
+                $row->setSourceProperty($key, $convertDate);
+              }
+            }
+          }
+          else {
+            $dateformat = $row->getSourceProperty($key);
+            $convertDate = date('Y-m-d\TH:i:s', strtotime($dateformat));
+            \Drupal::logger('migrate_entities')->debug($dateformat);
+            \Drupal::logger('migrate_entities')->debug($convertDate);
+            $row->setSourceProperty($key, $convertDate);
+          }     
+        }    
+      }
+    }
+  }
+  
+  // echo "Migration1:".$migration->id();
+  // exit;
+  // if($row->hasSourceProperty('field_dateofbirth')) {
+  //   if(!empty($row->getSourceProperty('field_dateofbirth'))) {
+  //     $dateformat = $row->getSourceProperty('field_dateofbirth');
+  //     $convertDate = date('Y-m-d\TH:i:s', strtotime($dateformat));
+  //     \Drupal::logger('migrate_entities')->debug($dateformat);
+  //     \Drupal::logger('migrate_entities')->debug($convertDate);
+  //     $row->setSourceProperty('field_dateofbirth', $convertDate);      
+  //   }    
+  // }
+//$logger = \Drupal::service('logger.factory');
+  
+  //$date1 = $row->getSourceProperty('field_date');
+  //$date = strtotime($date1); // -> 1336341600 unix timestamp
+  //$date = date_format(date_create($date1), 'Y-m-d');
+  //$date = date('Y-m-d H:i:s', $date); // -> "2012-05-07"
+  //$row->setSourceProperty('field_date', $date);
+  //$logger->get('custom_migrate')->debug("date:".$date);
+  //$logger->get('custom_migrate')->debug("date1:".$date1);
+  // $logger->get('custom_migrate')->debug(kint($row));
+  // $logger->get('custom_migrate')->debug(kint($source));
+  //$logger->get('custom_migrate')->debug(kint($migration));
+  //$logger->get('custom_migrate')->debug($date);
+  //$logger->get('custom_migrate')->debug($date1);
+
+    //echo "Source1:";
+    //kint($source);
+    //kint($source->getPluginId());
+  // kint($source->getBaseId());
+  // echo "Migration1:";
+  //kint($migration->id());
+    //echo "<br>---------------------<br>";
+     
   }
