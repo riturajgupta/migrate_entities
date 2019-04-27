@@ -1,42 +1,73 @@
 <?php
+
 use Drupal\Core\Form\FormStateInterface; 
 use Drupal\migrate_entities\GetAllFunctions;
+use Drupal\migrate\Row;
+use Drupal\migrate\Plugin\MigrationInterface;
+use Drupal\migrate\Plugin\MigrateSourceInterface;
+use Drupal\Core\Url;
 
-function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
- if($form_id == 'simple_node_confirm_importing_form'){
-    $form['submit'] = array(
-    '#value' => t('Submit'),
-    '#type' => 'submit',
-    '#submit' =>array('migrate_entities_submit'), 
-  );
-    return $form;
+/**
+ * Implements hook_help().
+ *
+ * Displays help and module information.
+ */
+function migrate_entities_help($path, $arg) {
+
+  $base_url = \Drupal::request()->getSchemeAndHttpHost();
+  $drupalOrgPath = Url::fromUri('https://www.drupal.org/sandbox/sourdrup/2828039');
+  $modulePageUriLink = $base_url . '/admin/modules';
+  $output = '';
+   
+  switch ($path) {    
+    case 'help.page.migrate_entities':
+      $output .= '<h3>' . t('ABOUT') . '</h3>';
+      $output .= t('<p>Migrate Entities is a module which allows end users to import entities(node) using CSV files. It provides a Flexible Mapping UI to map CSV columns to it\'s corresponding entity field.');
+      $output .= '<h3>' . t('USES') . '</h3>';
+      $output .= '<dl>';
+      $output .= '<dt><strong>' . t('Enabling module') . '</strong></dt>';
+      $output .= t('<dd>This module get install in the same manner as other module does. You need to download it and save it into "/modules" directory and enable it from the <a href="@modulePageUriLink">Module</a> Page</dd>', ['@modulePageUriLink' => $modulePageUriLink]);
+      $output .= '<dt><strong>' . t('Working with Migrate Entities') . '</strong></dt>';
+      $output .= '<dd>' . t('Working with Migrate Entities is very easy. It is depended on Simple Node Importer module. After installing this module, you will see extra submit button for migration on confirmation page.') . '</dd>';
   }
-  
+  return render($output);
 }
-function migrate_entities_submit(&$form, FormStateInterface &$form_state){
 
-  $dataValues = GetAllFunctions::MigrationSubmit($form_state);
-  die('aaa');
-  
+/*
+ * Implement hook_form_alter().
+ */
+function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
+  if($form_id == 'simple_node_confirm_importing_form') {
+    $form['submit'] = array(
+     '#value' => t('Migration Submit'),
+     '#type' => 'submit',
+     '#submit' =>array('migrate_entities_submit'), 
+    );
+    return $form;
+  }  
+}
+
+/*
+ * Call migration class to register migration.
+ */
+function migrate_entities_submit(&$form, FormStateInterface &$form_state) {
+  GetAllFunctions::MigrationSubmit($form_state);
 }
  
-
-
-
+/*
+ * Implement hook_migrate_prepare_row().
+ */
 function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $source, MigrationInterface $migration) {
-  //\Drupal::service('event_dispatcher')->dispatch(MigrateEvents::PREPARE_ROW, new MigratePrepareRowEvent($row, $source, $migration));
-      
-  //   \Drupal::logger('custom_migrate')->debug($source);
-  //   \Drupal::logger('custom_migrate')->debug($migration);
-  // echo "<pre>";
-  // print_r($row);
-  // print_r($row->getSource());
+  $sessionVariable = [];
+  $bundleType = '';
+  $field_definitions = [];
 
   $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
   $bundleType = $sessionVariable->get('bundle_type');  
-  //print_r($row->getSource()); exit;
-  foreach($row->getSource() as $key => $value) {
-    $field_definitions = FieldTermType($key, $bundleType);
+   
+  foreach($row->getSource() as $key => $value) { 
+    $field_definitions = GetAllFunctions::FieldTermType($key, $bundleType);
+    //Check if field type id datetime.
     if($field_definitions['field_type'] == 'datetime') {
       if($row->hasSourceProperty($key)) {         
         if(!empty($row->getSourceProperty($key))) {
@@ -44,8 +75,10 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
           $findColon = strpos($dateformat, ";");
           if($findColon !== false) {
             $dateExplode = explode(";", $dateformat);
+            //Check if date field value is more then one.
             if(!empty($dateExplode)) {
-              foreach($dateExplode as $dateKey => $dateValue) {                 
+              foreach($dateExplode as $dateKey => $dateValue) {    
+                //Covert the field date into database date time structure.             
                 $convertDate[] = date('Y-m-d\TH:i:s', strtotime($dateValue));
               }
               $dateVal = implode(';', $convertDate);               
@@ -53,6 +86,7 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
             }
           }
           else {
+            //Convert single field date into database date time structure.  
             $dateformat = $row->getSourceProperty($key);
             $convertDate = date('Y-m-d\TH:i:s', strtotime($dateformat));             
             $row->setSourceProperty($key, $convertDate);
@@ -69,41 +103,5 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
         }
       }
     }
-  }
-   
-  
-  // echo "Migration1:".$migration->id();
-  // exit;
-  // if($row->hasSourceProperty('field_dateofbirth')) {
-  //   if(!empty($row->getSourceProperty('field_dateofbirth'))) {
-  //     $dateformat = $row->getSourceProperty('field_dateofbirth');
-  //     $convertDate = date('Y-m-d\TH:i:s', strtotime($dateformat));
-  //     \Drupal::logger('migrate_entities')->debug($dateformat);
-  //     \Drupal::logger('migrate_entities')->debug($convertDate);
-  //     $row->setSourceProperty('field_dateofbirth', $convertDate);      
-  //   }    
-  // }
-//$logger = \Drupal::service('logger.factory');
-  
-  //$date1 = $row->getSourceProperty('field_date');
-  //$date = strtotime($date1); // -> 1336341600 unix timestamp
-  //$date = date_format(date_create($date1), 'Y-m-d');
-  //$date = date('Y-m-d H:i:s', $date); // -> "2012-05-07"
-  //$row->setSourceProperty('field_date', $date);
-  //$logger->get('custom_migrate')->debug("date:".$date);
-  //$logger->get('custom_migrate')->debug("date1:".$date1);
-  // $logger->get('custom_migrate')->debug(kint($row));
-  // $logger->get('custom_migrate')->debug(kint($source));
-  //$logger->get('custom_migrate')->debug(kint($migration));
-  //$logger->get('custom_migrate')->debug($date);
-  //$logger->get('custom_migrate')->debug($date1);
-
-    //echo "Source1:";
-    //kint($source);
-    //kint($source->getPluginId());
-  // kint($source->getBaseId());
-  // echo "Migration1:";
-  //kint($migration->id());
-    //echo "<br>---------------------<br>";
-     
-  }
+  }  
+}
