@@ -1,0 +1,14 @@
+.path-nodeimport .migration {
+  display: inline-block;
+  float: right;
+  clear: both;
+  margin-top: -300px;
+  margin-right: 100px;
+}
+.path-nodeimport #block-bartik-page-title {
+  width: 50%;
+  border-right: 1px solid #ccc;
+}
+.form-item-cancel {
+  display: inline-block;
+}

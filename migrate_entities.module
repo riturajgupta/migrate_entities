@@ -38,11 +38,27 @@ function migrate_entities_help($path, $arg) {
  */
 function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
   if($form_id == 'simple_node_confirm_importing_form') {
+    $current_path = \Drupal::service('path.current')->getPath();
+     
+     
+    $form['help'] = [
+      '#type' => 'item',
+      '#title' => t('Migration API'),
+      '#markup' => t('Your content will be migrated from migration API.'),
+      '#prefix' => '<div class="migration">',
+    ];
     $form['submit'] = array(
      '#value' => t('Migration Submit'),
      '#type' => 'submit',
-     '#submit' =>array('migrate_entities_submit'), 
+     '#submit' => array('migrate_entities_submit'),     
     );
+    $form['cancel'] = [
+      '#type' => 'item',
+      '#markup' => '<a href="" class="button" data-drupal-selector="edit-cancel" id="edit-cancel">Cancel</a>',
+      '#suffix' => '</div>',   
+    ];
+    $form['#attached']['library'][] = 'migrate_entities/migrate_entities_form';
+     
     return $form;
   }  
 }
