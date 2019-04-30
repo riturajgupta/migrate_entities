@@ -1,4 +1,0 @@
-migrate_entities_form:
-  css:
-    theme:
-      css/migrate_entities.css: {}
