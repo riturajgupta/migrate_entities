@@ -155,12 +155,12 @@ class GetAllFunctions
             
       foreach($header_row as $key => $value) {
         $process[$value] = $value;
-        $process[$value] = [
-          'plugin' => 'explode',
-          'source' => $value,
-          'delimiter' => ';',
-          //'limit' => 5,
-        ]; 
+        // $process[$value] = [
+        //   'plugin' => 'explode',
+        //   'source' => $value,
+        //   'delimiter' => ';',
+        //   //'limit' => 5,
+        // ]; 
        
         //Fetch each field definition.
         $type_result = GetAllFunctions::fieldTermType($value, $bundleType);        
