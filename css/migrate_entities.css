@@ -12,3 +12,7 @@
 .form-item-cancel {
   display: inline-block;
 }
+.migration label {
+  font-size: 2em !important;
+  font-weight: normal;
+}
