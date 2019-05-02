@@ -1,34 +1,17 @@
 <?php
 
 namespace Drupal\migrate_entities;
-use Drupal\Core\Config\ConfigFactory;
+
 use Drupal\migrate_plus\Entity\MigrationGroup;
 use Drupal\migrate_plus\Entity\Migration;
 use Drupal\migrate_source_csv\CSVFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-use Drupal\Core\Url;
 
 /**
  * Class GetAllFunctions.
  */
 class GetAllFunctions
 {
-  /**
-   * Drupal\Core\Config\ConfigFactory definition.
-   *
-   * @var Drupal\Core\Config\ConfigFactory
-   */
-  protected $configFactory;
-  
-  /**
-   * Constructor.
-   */
-  public function __construct(ConfigFactory $configFactory)
-  {
-    $this->configFactory = $configFactory;
-     
-  }
-
   /*
    * Call migration submit function to register migration.
    */
@@ -135,7 +118,7 @@ class GetAllFunctions
     $fileName = $bundleType . '_template.csv';
      
     //Generate new CSV file and placed on a specific folder and get the file object.
-    $new_file = GetAllFunctions::coutputCsv($fileName, $assocDataArray);
+    $new_file = self::coutputCsv($fileName, $assocDataArray);
     $file_uri = $new_file->values['uri']['x-default'][0]['value'];
     $file_uri = $new_file->get('uri')->getValue();
     $file_path = $file_uri[0]['value'];
@@ -143,27 +126,29 @@ class GetAllFunctions
     if(!empty($file_uri)) {
       /* Get the uploaded file path */
       $file_uri = explode('public://upload_csv/', $file_path);
+      
       /* Get the file name */
       $file_name = $file_uri[1];
 
       /* Convert the CSV into array */
-      $data = GetAllFunctions::csvToArray($file_path, ',');
+      $data = self::csvToArray($file_path, ',');
       
       /* Mapping fields */
-      $header_row = GetAllFunctions::csvHeader($file_path);
+      $header_row = self::csvHeader($file_path);
       array_shift($header_row);
             
       foreach($header_row as $key => $value) {
         $process[$value] = $value;
-        // $process[$value] = [
-        //   'plugin' => 'explode',
-        //   'source' => $value,
-        //   'delimiter' => ';',
-        //   //'limit' => 5,
-        // ]; 
+        
+        //Set expode plugin to migrate other mutivalues fields.
+        $process[$value] = [
+          'plugin' => 'explode',
+          'source' => $value,
+          'delimiter' => ';'
+        ]; 
        
         //Fetch each field definition.
-        $type_result = GetAllFunctions::fieldTermType($value, $bundleType);        
+        $type_result = self::fieldTermType($value, $bundleType);        
          
         if($type_result['entity_type'] == 'file' && $type_result['field_type'] == 'file') {
           $fileValue[] = $value;
@@ -188,7 +173,7 @@ class GetAllFunctions
       //Check condition for file.
       if(!empty($fileValue)) {
         foreach($fileValue as $key_array => $key_value) {
-          $process[$key_value] = GetAllFunctions::fileProcess($key_value, $bundleType);
+          $process[$key_value] = self::fileProcess($key_value, $bundleType);
         }
         $files = [
           'file_destination' => 'public://new_file/',
@@ -199,7 +184,7 @@ class GetAllFunctions
       //Check condition for image.
       if(!empty($imageValue)) {
         foreach($imageValue as $key_array => $key_value) {
-          $process[$key_value] = GetAllFunctions::imageProcess($key_value, $bundleType);
+          $process[$key_value] = self::imageProcess($key_value, $bundleType);
         }           
         $images = [
           'image_destination' => 'public://new_images/',
@@ -225,7 +210,7 @@ class GetAllFunctions
       //Check condition for taxonomy terms.
       if(!empty($termValue)) {
         foreach($termValue as $key_array => $key_value) {
-          $process[$key_value] = GetAllFunctions::taxonomyTermProcess($key_value, $bundleType);
+          $process[$key_value] = self::taxonomyTermProcess($key_value, $bundleType);
         }
       }
       
@@ -361,7 +346,7 @@ class GetAllFunctions
    */
   public static function taxonomyTermProcess($field_name,$bundleType)
   {
-    $type_result = GetAllFunctions::FieldTermType($field_name, $bundleType);    
+    $type_result = self::FieldTermType($field_name, $bundleType);    
     
     //Confirmt that field is term type.
     if($type_result['field_type'] == 'entity_reference' && $type_result['entity_type'] == 'taxonomy_term') {
@@ -405,7 +390,7 @@ class GetAllFunctions
    * set the plugin to import files.
    */
   public static function fileProcess($field_name,$bundleType) {
-    $type_result = GetAllFunctions::FieldTermType($field_name, $bundleType);
+    $type_result = self::FieldTermType($field_name, $bundleType);
 
     //Confirm check that if fiels is 'file' type.
     if($type_result['field_type'] == 'file' && $type_result['entity_type'] == 'file') {
@@ -435,7 +420,7 @@ class GetAllFunctions
   }
 
   public static function imageProcess($field_name, $bundleType) {
-      $type_result = GetAllFunctions::FieldTermType($field_name, $bundleType);
+      $type_result = self::FieldTermType($field_name, $bundleType);
       //kint($type_result); die;
       if($type_result['field_type'] == 'image' && $type_result['entity_type'] == 'file') {
           $field_definition = $type_result['field_definition'];    
