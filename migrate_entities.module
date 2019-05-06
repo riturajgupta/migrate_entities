@@ -92,7 +92,6 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
           if($findColon !== false) {
             $dateExplode = explode(";", $dateformat);
             //Check if date field value is more then one.
-            $convertDate = [];
             if(!empty($dateExplode)) {
               foreach($dateExplode as $dateKey => $dateValue) {    
                 //Covert the field date into database date time structure.             

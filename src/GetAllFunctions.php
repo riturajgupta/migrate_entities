@@ -1,12 +1,9 @@
 <?php
-
 namespace Drupal\migrate_entities;
-
 use Drupal\migrate_plus\Entity\MigrationGroup;
 use Drupal\migrate_plus\Entity\Migration;
 use Drupal\migrate_source_csv\CSVFileObject;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-
 /**
  * Class GetAllFunctions.
  */
@@ -24,41 +21,32 @@ class GetAllFunctions
     $termValue = [];
     $constants = [];
     $file_uri = '';
-
     $form_state->cleanValues();
     $haystack = 'snp_';
-
     foreach ($form_state->getValues() as $key => $val) {
       if (strpos($key, $haystack) === false) {
         $mapvalues[$key] = $val;        
       }
     }
-
     $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
     $parameters= $sessionVariable->get('parameters');
-
     $snp_nid= $parameters['node'];
     $node_storage = \Drupal::entityTypeManager()->getStorage('node')->load($snp_nid);
     $node = $node_storage->load($snp_nid);
     $fid = $node->get('field_upload_csv')->getValue()[0]['target_id'];
     $file_storage = \Drupal::entityTypeManager()->getStorage('file')->load($fid);
-
     $bundleType = $node_storage->get('field_select_content_type')->getValue()[0]['value'];
     $entityType = $node_storage->get('field_select_entity_type')->getValue()[0]['value'];
     $bundleTypeSession = $sessionVariable->set('bundle_type', $bundleType);
-
     $operations = [];
     $map_values = $sessionVariable->get('mapvalues');
     $file = $file_storage->load($fid);
     $csv_uri = $file->getFileUri();
     $handle = fopen($csv_uri, 'r');
-
     $columns = [];
     $service = \Drupal::service('snp.get_services');
     $columns = array_values($service->simpleNodeImporterGetAllColumnHeaders($csv_uri));
-
     $map_fields = array_keys($map_values);
-
     $i = 1;
     $id = 1;
     while ($row = fgetcsv($handle)) {
@@ -66,25 +54,29 @@ class GetAllFunctions
         $i++;
         continue;
       }
-
       $record = [];
       $record['id'] = $id;
-      foreach ($row as $k => $field) {             
+      foreach ($row as $k => $field) {
         $column1 = str_replace(' ', '_', strtolower($columns[$k]));
         foreach ($map_fields as $field_name) {
           if ($map_values[$field_name] == $column1) {
-            $record[$field_name] = $field;              
-          }            
+            $record[$field_name] = trim($field);
+          }
           else {
-            if (is_array($map_values[$field_name]) && !empty($field)) {
+            if (is_array($map_values[$field_name])) {
               $multiple_fields = array_keys($map_values[$field_name]);
-              foreach ($multiple_fields as $k => $m_fields) {
+              foreach ($multiple_fields as $j => $m_fields) {
                 if ($m_fields == $column1) {
-                  $record[$field_name][$k] = $field;
+                  if (!empty($field)) {
+                    $record[$field_name][$j] = trim($field);
+                  }
+                  else {
+                    $record[$field_name][$j] = NULL;
+                  }
                 }
-              }                    
+              }
             }
-          }             
+          }
         }
       }
       
@@ -100,20 +92,25 @@ class GetAllFunctions
       else {
         $record['status'] = 1;
       }
-
       //Set user uid according to 0 or 1.
       $record['uid'] = !empty($record['uid']) ? $record['uid'] : '1';
       $id++;
-      
+       
       //If field is multivalues then concatenate with ; and place in a single column.
       foreach($record as $rec => $value) {
-        if(is_array($value) && !empty($value)) {             
-          $record[$rec] = implode(";", $value);
+        if(is_array($value) && !empty($value)) {
+           $multi_array = [];
+          foreach($value as $var_key => $var_item) {
+            if (!empty($var_item)) {
+              $multi_array[] = $var_item;
+            }
+          }          
+          $record[$rec] = implode(";", $multi_array);
         }
       }
       $records[] = $record;
     }
-    
+     
     $assocDataArray = $records;
     $fileName = $bundleType . '_template.csv';
      
@@ -122,14 +119,12 @@ class GetAllFunctions
     $file_uri = $new_file->values['uri']['x-default'][0]['value'];
     $file_uri = $new_file->get('uri')->getValue();
     $file_path = $file_uri[0]['value'];
-
     if(!empty($file_uri)) {
       /* Get the uploaded file path */
       $file_uri = explode('public://upload_csv/', $file_path);
       
       /* Get the file name */
       $file_name = $file_uri[1];
-
       /* Convert the CSV into array */
       $data = self::csvToArray($file_path, ',');
       
@@ -162,7 +157,6 @@ class GetAllFunctions
           $termValue[] = $value;
         }        
       }
-
       $process += [
         'type'  => [
           'plugin'        => 'default_value',
@@ -180,7 +174,6 @@ class GetAllFunctions
         ];          
       }
       $file = !empty($files) ? $files : [];         
-
       //Check condition for image.
       if(!empty($imageValue)) {
         foreach($imageValue as $key_array => $key_value) {
@@ -191,7 +184,6 @@ class GetAllFunctions
         ];          
       }
       $image = !empty($images) ? $images : [];
-
       //Below conditions to set the constant array.
       if(!empty($file) && !empty($image)) {
         $constants = array_merge($file, $image);
@@ -224,7 +216,6 @@ class GetAllFunctions
         else {
           $migrationGroup = $migration['migration_group'];
         }
-
         //If group already exists then load it.
         $group = MigrationGroup::load($migration['migration_group']);
         if (empty($group)) {
@@ -241,12 +232,10 @@ class GetAllFunctions
             $group_properties['label'] = $group_properties['id'];
             $group_properties['description'] = '';
           }
-
           //Create function to create migration group.
           $group = MigrationGroup::create($group_properties);
           $group->save();
         }
-
         $migration = Migration::create(
           [
             'id' => $bundleType.'_'.$entityType.'_'.'import_'.$rand,
@@ -266,7 +255,6 @@ class GetAllFunctions
             'file_flags' => \SplFileObject::READ_CSV | \SplFileObject::READ_AHEAD | \SplFileObject::DROP_NEW_LINE | \SplFileObject::SKIP_EMPTY,              
             $constantMultiple,             
             ],
-
             'destination' => [
               'plugin' => 'entity:node',
               'default_bundle' => $bundleType
@@ -276,7 +264,6 @@ class GetAllFunctions
             'migration_dependencies' => [],
           ]
         );
-
         //Save and create migration list.
         $migration->save();
         
@@ -287,7 +274,6 @@ class GetAllFunctions
       }
     }
   }
-
   /* 
    * Create new CSV according to refine array and
    * place on a specific path
@@ -299,7 +285,6 @@ class GetAllFunctions
     foreach ($assocDataArray as $values){
         fputcsv($csv_handler, $values);
     }
-
     //Define the folder directory name.
     $directory = 'public://upload_csv/';
     file_prepare_directory($directory, FILE_CREATE_DIRECTORY);
@@ -308,11 +293,10 @@ class GetAllFunctions
     
     //Place the new CSV file on above directory.
     $file_save = file_save_data($file, $directory.$fileName, FILE_EXISTS_RENAME);
+	 
     fclose($csv_handler);
-
     return $file_save;
   }
-
   /*
    * Convert CSV to array 
    */
@@ -322,7 +306,6 @@ class GetAllFunctions
     }
     $header = null;
     $data = array();
-
     if (($handle = fopen($filename, 'r')) !== false ) {
       while (($row = fgetcsv($handle, 1000, $delimiter)) !== false)
       {
@@ -336,10 +319,8 @@ class GetAllFunctions
         
       fclose($handle);
     }
-
     return $data;
   }
-
   /*
    * Fetch the term field type and 
    * set the plugin to create or set terms.
@@ -353,7 +334,6 @@ class GetAllFunctions
       $field_definition = $type_result['field_definition'];
       $term_machine_name = $field_definition->getSetting('handler_settings')['target_bundles'];
     }
-
     if(!empty($term_machine_name)) {
       foreach($term_machine_name as $term_key => $term_value) {
         $machine_name = $term_value;
@@ -376,7 +356,6 @@ class GetAllFunctions
         ],
       ];
     }
-
     if(!empty($machine_name)) {
       return $process;
     } 
@@ -384,14 +363,12 @@ class GetAllFunctions
       return;
     }
   }
-
   /*
    * Fetch the file field type and 
    * set the plugin to import files.
    */
   public static function fileProcess($field_name,$bundleType) {
     $type_result = self::FieldTermType($field_name, $bundleType);
-
     //Confirm check that if fiels is 'file' type.
     if($type_result['field_type'] == 'file' && $type_result['entity_type'] == 'file') {
       $field_definition = $type_result['field_definition'];
@@ -410,15 +387,12 @@ class GetAllFunctions
           'destination' => 'constants/file_destination',
         ],
       ];     
-
       return $process;
     } 
     else {
       return;
     }
-
   }
-
   public static function imageProcess($field_name, $bundleType) {
       $type_result = self::FieldTermType($field_name, $bundleType);
       //kint($type_result); die;
@@ -440,15 +414,12 @@ class GetAllFunctions
           'destination' => 'constants/image_destination',
           ],
           ];
-
           return $process;
       } 
       else {
           return array();
       }
-
   }
-
     public static function fieldTermType($field_name, $bundleType)
     {
         $bundle_fields = \Drupal::getContainer()->get('entity_field.manager')->getFieldDefinitions('node', $bundleType);
@@ -472,7 +443,6 @@ class GetAllFunctions
             return;
         }
     }
-
     public static function csvHeader($path='')
     {    
         $file = fopen($path, 'r');
@@ -480,5 +450,4 @@ class GetAllFunctions
      
         return $headers;
     }
-
 }
