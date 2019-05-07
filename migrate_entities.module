@@ -27,24 +27,24 @@ function migrate_entities_help($path, $arg) {
   switch ($path) {
     case 'help.page.migrate_entities':
       $output .= '<h3>' . t('ABOUT') . '</h3>';
-      $output .= t('<p>Migrate Entities is a module which allows end users to import entities(node) using CSV files. It provides a Flexible Mapping UI to map CSV columns to it\'s corresponding entity field.');
+      $output .= t('<p>Migrate Entities is a module which allows end users to import entities(node) using CSV files. This module is depended on Simple Node Importer module which provides a Flexible Mapping UI to map CSV columns to it\'s corresponding entity field. For more information, see the online handbook entry for <a href="@simplenodeimporter">Simple Node Importer</a> module.</p>', ['@simplenodeimporter' => $drupalOrgPath->getUri()]);
       $output .= '<h3>' . t('USES') . '</h3>';
       $output .= '<dl>';
       $output .= '<dt><strong>' . t('Enabling module') . '</strong></dt>';
       $output .= t('<dd>This module get install in the same manner as other module does. You need to download it and save it into "/modules" directory and enable it from the <a href="@modulePageUriLink">Module</a> Page</dd>', ['@modulePageUriLink' => $modulePageUriLink]);
       $output .= '<dt><strong>' . t('Working with Migrate Entities') . '</strong></dt>';
-      $output .= '<dd>' . t('Working with Migrate Entities is very easy. It is depended on Simple Node Importer module. After installing this module, you will see extra submit button for migration on confirmation page.') . '</dd>';
+      $output .= '<dd>' . t('Working with Migrate Entities is very easy. As we know, It is depended on Simple Node Importer module. After installing this module, you will see extra submit button for migration on confirmation page.') . '</dd>';
   }
   return render($output);
 }
 
 /**
- * Implement hook_form_alter().
+ * Implements hook_foo().
  */
 function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $form_id) {
   if ($form_id == 'simple_node_confirm_importing_form') {
     $current_path = \Drupal::service('path.current')->getPath();
-
+    $newPath = str_replace('importing', 'mapping', $current_path);
     $form['help'] = [
       '#type' => 'item',
       '#title' => t('Migration API'),
@@ -58,12 +58,69 @@ function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $f
     ];
     $form['cancel'] = [
       '#type' => 'item',
-      '#markup' => '<a href="" class="button" data-drupal-selector="edit-cancel" id="edit-cancel">Cancel</a>',
+      '#markup' => '<a href="'.$newPath.'" class="button" data-drupal-selector="edit-cancel" id="edit-cancel">Cancel</a>',
       '#suffix' => '</div>',
     ];
     $form['#attached']['library'][] = 'migrate_entities/migrate_entities_form';
 
     return $form;
+  }
+
+  if ($form_id == 'simple_node_importer_config_form') {
+    $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
+
+    $form['fieldset_date_format_settings'] = [
+      '#type' => 'fieldset',
+      '#title' => t('Date Format Settings'),
+      '#weight' => 2,
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+
+    ];
+    $options = [
+      'm-d-Y' => t('Set date as m-d-Y'),
+      'd-m-Y' => t('Set date as d-m-Y'),
+      'custom_date' => t('Custom'),
+    ];
+    $form['fieldset_date_format_settings']['date_type_select'] = [
+      '#type' => 'radios',
+      '#options' => $options,
+      '#weight' => 2,
+      '#default_value' => $config->get('date_type_select'),
+      '#description' => t('Date will be set accordingly.'),
+    ];
+    $form['fieldset_date_format_settings']['custom_date'] = [
+      '#type' => 'textfield',
+      '#title' => t('Enter Date Format'),
+      '#default_value' => $config->get('custom_date'),
+      '#size' => 60,
+      '#maxlength' => 128,
+      '#weight' => 2,
+      '#states' => [
+        'visible' => [
+          ':input[name="date_type_select"]' => ['value' => 'custom_date'],
+        ],
+      ],
+    ];
+    $form['#submit'][] = 'migrate_entities_date_submit';
+
+  }
+}
+
+/**
+ * Submit date format.
+ */
+function migrate_entities_date_submit(array &$form, FormStateInterface &$form_state) {
+  $date_type_select = $form_state->getValue('date_type_select');
+  $custom_date = $form_state->getValue('custom_date');
+  $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
+  if ($date_type_select == 'custom_date' && !empty($custom_date)) {
+    $config->set('custom_date', $custom_date)->save();
+    $config->set('date_type_select', $form_state->getValue('date_type_select'))->save();
+  }
+  else {
+    $config->set('date_type_select', $form_state->getValue('date_type_select'))->save();
+    $config->set('custom_date', '')->save();
   }
 }
 
@@ -75,15 +132,28 @@ function migrate_entities_submit(&$form, FormStateInterface &$form_state) {
 }
 
 /**
- * Implement hook_migrate_prepare_row().
+ * Implements hook_foo().
  */
 function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $source, MigrationInterface $migration) {
   $sessionVariable = [];
   $bundleType = '';
   $field_definitions = [];
+  $dateKey = [];
 
   $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
   $bundleType = $sessionVariable->get('bundle_type');
+  $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
+
+  // Set date format.
+  if (empty($config->get('date_type_select'))) {
+    $date_format = 'm-d-Y';
+  }
+  elseif (!empty($config->get('date_type_select')) && $config->get('date_type_select') != 'custom_date') {
+    $date_format = $config->get('date_type_select');
+  }
+  else {
+    $date_format = $config->get('custom_date');
+  }
 
   foreach ($row->getSource() as $key => $value) {
     $field_definitions = GetAllFunctions::FieldTermType($key, $bundleType);
@@ -99,7 +169,7 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
             if (!empty($dateExplode)) {
               foreach ($dateExplode as $dateKey => $dateValue) {
                 // Covert the field date into database date time structure.
-                $date = DateTime::createFromFormat('d/m/Y', $dateValue);
+                $date = DateTime::createFromFormat($date_format, $dateValue);
                 $newDateFormat = $date->format('Y-m-d\TH:i:s');
                 $convertDate[] = $newDateFormat;
               }
@@ -110,7 +180,7 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
           else {
             // Convert single field date into database date time structure.
             $dateformat = $row->getSourceProperty($key);
-            $date = DateTime::createFromFormat('d/m/Y', $dateformat);
+            $date = DateTime::createFromFormat($date_format, $dateformat);
             $newDateFormat = $date->format('Y-m-d\TH:i:s');
             $row->setSourceProperty($key, $newDateFormat);
           }

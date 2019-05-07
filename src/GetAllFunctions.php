@@ -4,6 +4,7 @@ namespace Drupal\migrate_entities;
 
 use Drupal\migrate_plus\Entity\MigrationGroup;
 use Drupal\migrate_plus\Entity\Migration;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 
 /**
  * Class GetAllFunctions.
@@ -22,12 +23,7 @@ class GetAllFunctions {
     $constants = [];
     $file_uri = '';
     $form_state->cleanValues();
-    $haystack = 'snp_';
-    foreach ($form_state->getValues() as $key => $val) {
-      if (strpos($key, $haystack) === FALSE) {
-        $mapvalues[$key] = $val;
-      }
-    }
+
     $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
     $parameters = $sessionVariable->get('parameters');
     $snp_nid = $parameters['node'];
@@ -37,8 +33,6 @@ class GetAllFunctions {
     $file_storage = \Drupal::entityTypeManager()->getStorage('file')->load($fid);
     $bundleType = $node_storage->get('field_select_content_type')->getValue()[0]['value'];
     $entityType = $node_storage->get('field_select_entity_type')->getValue()[0]['value'];
-    $bundleTypeSession = $sessionVariable->set('bundle_type', $bundleType);
-    $operations = [];
     $map_values = $sessionVariable->get('mapvalues');
     $file = $file_storage->load($fid);
     $csv_uri = $file->getFileUri();
@@ -276,8 +270,8 @@ class GetAllFunctions {
 
         // Redirect on migration group page.
         $redirect_path = '/admin/structure/migrate/manage/' . $migrationGroup . '/migrations';
-        // $response = new RedirectResponse($redirect_path);
-        // return $response->send();
+        $response = new RedirectResponse($redirect_path);
+        return $response->send();
       }
     }
   }
