@@ -11,6 +11,7 @@ use Drupal\migrate\Row;
 use Drupal\migrate\Plugin\MigrationInterface;
 use Drupal\migrate\Plugin\MigrateSourceInterface;
 use Drupal\Core\Url;
+use Drupal\Core\Datetime\DrupalDateTime;
 
 /**
  * Implements hook_help().
@@ -18,7 +19,6 @@ use Drupal\Core\Url;
  * Displays help and module information.
  */
 function migrate_entities_help($path, $arg) {
-
   $base_url = \Drupal::request()->getSchemeAndHttpHost();
   $drupalOrgPath = Url::fromUri('https://www.drupal.org/sandbox/sourdrup/2828039');
   $modulePageUriLink = $base_url . '/admin/modules';
@@ -65,63 +65,7 @@ function migrate_entities_form_alter(&$form, FormStateInterface &$form_state, $f
 
     return $form;
   }
-
-  if ($form_id == 'simple_node_importer_config_form') {
-    $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
-
-    $form['fieldset_date_format_settings'] = [
-      '#type' => 'fieldset',
-      '#title' => t('Date Format Settings'),
-      '#weight' => 2,
-      '#collapsible' => TRUE,
-      '#collapsed' => FALSE,
-
-    ];
-    $options = [
-      'm-d-Y' => t('Set date as m-d-Y'),
-      'd-m-Y' => t('Set date as d-m-Y'),
-      'custom_date' => t('Custom'),
-    ];
-    $form['fieldset_date_format_settings']['date_type_select'] = [
-      '#type' => 'radios',
-      '#options' => $options,
-      '#weight' => 2,
-      '#default_value' => $config->get('date_type_select'),
-      '#description' => t('Date will be set accordingly.'),
-    ];
-    $form['fieldset_date_format_settings']['custom_date'] = [
-      '#type' => 'textfield',
-      '#title' => t('Enter Date Format'),
-      '#default_value' => $config->get('custom_date'),
-      '#size' => 60,
-      '#maxlength' => 128,
-      '#weight' => 2,
-      '#states' => [
-        'visible' => [
-          ':input[name="date_type_select"]' => ['value' => 'custom_date'],
-        ],
-      ],
-    ];
-    $form['#submit'][] = 'migrate_entities_date_submit';
-
-  }
-}
-
-/**
- * Submit date format.
- */
-function migrate_entities_date_submit(array &$form, FormStateInterface &$form_state) {
-  $date_type_select = $form_state->getValue('date_type_select');
-  $custom_date = $form_state->getValue('custom_date');
-  $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
-  if ($date_type_select == 'custom_date' && !empty($custom_date)) {
-    $config->set('custom_date', $custom_date)->save();
-    $config->set('date_type_select', $form_state->getValue('date_type_select'))->save();
-  }
-  else {
-    $config->set('date_type_select', $form_state->getValue('date_type_select'))->save();
-    $config->set('custom_date', '')->save();
-  }
+   
 }
 
 /**
@@ -142,18 +86,6 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
 
   $sessionVariable = \Drupal::service('user.private_tempstore')->get('simple_node_importer');
   $bundleType = $sessionVariable->get('bundle_type');
-  $config = \Drupal::service('config.factory')->getEditable('simple_node_importer.settings');
-
-  // Set date format.
-  if (empty($config->get('date_type_select'))) {
-    $date_format = 'm-d-Y';
-  }
-  elseif (!empty($config->get('date_type_select')) && $config->get('date_type_select') != 'custom_date') {
-    $date_format = $config->get('date_type_select');
-  }
-  else {
-    $date_format = $config->get('custom_date');
-  }
 
   foreach ($row->getSource() as $key => $value) {
     $field_definitions = GetAllFunctions::FieldTermType($key, $bundleType);
@@ -170,10 +102,9 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
             if (!empty($dateExplode)) {
               foreach ($dateExplode as $dateKey => $dateValue) {
                 // Covert the field date into database date time structure.
-                $date = DateTime::createFromFormat($date_format, $dateValue);
+                $date = date_format(date_create($dateValue), 'Y-m-d\TH:i:s');
                 if (!empty($date)) {
-                  $newDateFormat = $date->format('Y-m-d\TH:i:s');
-                  $convertDate[] = $newDateFormat;
+                  $convertDate[] = $date;
                 }
               }
               $dateVal = implode(';', $convertDate);
@@ -183,9 +114,8 @@ function migrate_entities_migrate_prepare_row(Row $row, MigrateSourceInterface $
           else {
             // Convert single field date into database date time structure.
             $dateformat = $row->getSourceProperty($key);
-            $date = DateTime::createFromFormat($date_format, $dateformat);
+            $newDateFormat = date_format(date_create($dateformat), 'Y-m-d\TH:i:s');            
             if (!empty($date)) {
-              $newDateFormat = $date->format('Y-m-d\TH:i:s');
               $row->setSourceProperty($key, $newDateFormat);
             }
           }
